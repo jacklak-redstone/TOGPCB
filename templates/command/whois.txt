@@ -1,0 +1,10 @@
+{% set user = get_user(args) %}
+{% if user %}
+    **User Info**
+    Name: `{{ user.login }}`
+    Display Name: `{{ user.displayName }}`
+    Avatar URL: `{{ user.avatarUrl | default("unknown") }}`
+    ID: `{{ user.id }}`
+{% else %}
+    No user with the ID `{{ args }}` could be found!
+{% endif %}

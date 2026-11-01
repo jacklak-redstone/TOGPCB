@@ -1,0 +1,7 @@
+{% if args %}
+    {% for word in args | split(" ") %}
+        {{ word }}
+    {% endfor %}
+{% else %}
+    No args provided!
+{% endif %}

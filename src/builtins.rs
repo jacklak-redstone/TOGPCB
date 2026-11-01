@@ -1,16 +1,37 @@
 use churro::prelude::*;
 use churro::proto::chatto::api::v1::*;
+use minijinja::Environment;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use tokio::runtime::Runtime;
 
-pub(crate) fn cmd_entry(ctx: Ctx, cmd: String, args: String) {
-    rayon::spawn(move || {
-        if let Some(btin) = builtin_cmd().get(&cmd) {
-            let Some(message) = &ctx.message else { return };
+use minijinja::{Value, value::Serde};
 
+pub(crate) fn cmd_entry(ctx: Ctx, cmd: String, args: String, env: Arc<Environment<'static>>) {
+    rayon::spawn(move || {
+        let Some(message) = &ctx.message else { return };
+        let Some(user) = &ctx.user else { return };
+        let Some(room) = &ctx.room else { return };
+
+        if let Some(btin) = builtin_cmd().get(&cmd) {
             let _ = reply_in_thread(&ctx.bot.client, message, &btin(args), false);
         } else {
+            let template_name = format!("command/{cmd}");
+
+            let Ok(t) = env.get_template(&template_name) else {
+                return;
+            };
+
+            let Ok(r) = t.render(minijinja::context! {
+                user => Value::from(Serde(user)),
+                message => Value::from(Serde(message)),
+                room => Value::from(Serde(room)),
+                args => args
+            }) else {
+                return;
+            };
+
+            let _ = reply_in_thread(&ctx.bot.client, message, &r, false);
         }
     });
 }
@@ -64,19 +85,19 @@ fn runtime() -> &'static Runtime {
 }
 
 // DO NOT CALL THE FOLLOWING WRAPPERS FROM ASYNC CODE!!!
-fn fetch_room(client: &Client, room_id: &str) -> CResult<Room> {
+pub(crate) fn fetch_room(client: &Client, room_id: &str) -> CResult<Room> {
     runtime().block_on(Client::fetch_room(client, room_id))
 }
 
-fn fetch_user(client: &Client, user_id: &str) -> CResult<User> {
+pub(crate) fn fetch_user(client: &Client, user_id: &str) -> CResult<User> {
     runtime().block_on(Client::fetch_user(client, user_id))
 }
 
-fn fetch_msg(client: &Client, room_id: &str, message_id: &str) -> CResult<Message> {
+pub(crate) fn fetch_msg(client: &Client, room_id: &str, message_id: &str) -> CResult<Message> {
     runtime().block_on(Client::fetch_msg(client, room_id, message_id))
 }
 
-fn send_msg(client: &Client, room_id: &str, msg: &str) -> CResult {
+pub(crate) fn send_msg(client: &Client, room_id: &str, msg: &str) -> CResult {
     runtime().block_on(Client::send_message_raw(client, room_id, msg))
 }
 

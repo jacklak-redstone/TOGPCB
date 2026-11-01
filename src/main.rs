@@ -3,11 +3,15 @@ mod user_defined;
 
 use churro::prelude::*;
 use dotenvy::dotenv;
+use minijinja::Environment;
+use minijinja::value::Serde;
 
 use std::env;
+use std::sync::Arc;
 
 struct Hdlr {
     prefix: String,
+    env: Arc<Environment<'static>>,
 }
 
 #[async_trait]
@@ -23,7 +27,12 @@ impl EventHandler for Hdlr {
         };
 
         let (cmd, args) = msg.split_once(' ').unwrap_or((msg, ""));
-        builtins::cmd_entry(ctx, cmd.to_string(), args.to_string());
+        builtins::cmd_entry(
+            ctx,
+            cmd.to_string(),
+            args.to_string(),
+            Arc::clone(&self.env),
+        );
     }
 }
 
@@ -35,11 +44,31 @@ async fn main() -> CResult {
     let prefix = env::var("PREFIX").unwrap_or("$".to_string());
     let bot = Bot::login(&token, &server).await?;
 
-    user_defined::construct_env()
+    let mut env = user_defined::construct_env()
         .await
         .expect("Couldn't construct environment");
 
-    bot.listen(Hdlr { prefix }).await?;
+    let bot2 = Arc::new(bot.clone());
+
+    let bot_user = Arc::clone(&bot2);
+    env.add_function("get_user", move |user_id: String| {
+        builtins::fetch_user(&bot_user.client, &user_id)
+            .map(|user| Serde(user))
+            .ok()
+    });
+
+    let bot_room = Arc::clone(&bot2);
+    env.add_function("get_room", move |room_id: String| {
+        builtins::fetch_room(&bot_room.client, &room_id)
+            .map(|room| Serde(room))
+            .ok()
+    });
+
+    bot.listen(Hdlr {
+        prefix,
+        env: Arc::new(env),
+    })
+    .await?;
 
     tokio::signal::ctrl_c().await.unwrap();
 

@@ -1,0 +1,13 @@
+{% if args %}
+    {% set room = get_room(args) %}
+{% endif %}
+{% if room %}
+    **Room Info**
+    Name: `{{ room.name }}`
+    ID: `{{ room.id }}`
+    Description: `{{ room.description | default("[empty]") }}`
+    Universal: `{{ "yes" if room.universal else "no" }}`
+    Slowmode Timeout: `{{ room.slowModeSeconds | default("0") }}`
+{% else %}
+    Couldn't find that room!
+{% endif %}
